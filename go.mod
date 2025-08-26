@@ -5,7 +5,7 @@ go 1.24.3
 require (
 	github.com/avast/retry-go/v4 v4.6.1
 	github.com/gorilla/securecookie v1.1.2
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 	layeh.com/radius v0.0.0-20231213012653-1006025d24f8
 )
 
