@@ -198,6 +198,13 @@ func (p *Payload) tlsInit(ctx protocol.Context) {
 	p.st.TLS = tls.Server(p.st.Conn, cfg)
 	_ = p.st.TLS.SetDeadline(time.Now().Add(staleConnectionTimeout * time.Second))
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ctx.Log().Error("TLS: panic in handshake goroutine", "panic", r)
+				p.st.FinalStatus = protocol.StatusError
+				ctx.EndInnerProtocol(protocol.StatusError)
+			}
+		}()
 		err := p.st.TLS.HandshakeContext(p.st.Context)
 		if err != nil {
 			ctx.Log().Debug("TLS: Handshake error", "error", err)

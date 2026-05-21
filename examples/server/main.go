@@ -91,7 +91,12 @@ func (s *Server) GetEAPSettings() protocol.Settings {
 					ClientAuth:   ttls.RequireAnyClientCert,
 				},
 				HandshakeSuccessful: func(ctx protocol.Context, certs []*x509.Certificate) protocol.Status {
-					ident := ctx.GetProtocolState(identity.TypeIdentity).(*identity.State).Identity
+					identState, ok := ctx.GetProtocolState(identity.TypeIdentity).(*identity.State)
+					if !ok || identState == nil {
+						ctx.Log().Warn("TLS: handshake completed without identity phase")
+						return protocol.StatusError
+					}
+					ident := identState.Identity
 					ctx.Log().Info("Successful handshake with Identity", "identity", ident)
 					ctx.AddResponseModifier(func(r, q *radius.Packet) error {
 						_ = rfc2868.TunnelType_Set(r, 0x01, rfc3580.TunnelType_Value_VLAN)

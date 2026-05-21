@@ -36,7 +36,11 @@ func TestEAP_TLS(t *testing.T) {
 					ClientAuth:   ttls.RequireAnyClientCert,
 				},
 				HandshakeSuccessful: func(ctx protocol.Context, certs []*x509.Certificate) protocol.Status {
-					ident = ctx.GetProtocolState(identity.TypeIdentity).(*identity.State).Identity
+					identState, ok := ctx.GetProtocolState(identity.TypeIdentity).(*identity.State)
+					if !ok || identState == nil {
+						return protocol.StatusError
+					}
+					ident = identState.Identity
 					ctx.AddResponseModifier(func(r, q *radius.Packet) error {
 						_ = rfc2868.TunnelType_Set(r, 0x01, rfc3580.TunnelType_Value_VLAN)
 						_ = rfc2868.TunnelMediumType_Set(r, 0x01, rfc2868.TunnelMediumType_Value_IEEE802)

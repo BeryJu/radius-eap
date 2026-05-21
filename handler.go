@@ -114,6 +114,10 @@ func (p *Packet) handleEAP(pp protocol.Payload, stm protocol.StateManager, paren
 	}
 
 	if n, ok := pp.(*eap.Payload).Payload.(*legacy_nak.Payload); ok {
+		if st.ProtocolIndex == 0 {
+			l.Warn("Root-EAP: rejecting NAK at initial protocol")
+			return &eap.Payload{Code: protocol.CodeFailure, ID: p.eap.ID}, nil
+		}
 		l.Debug("Root-EAP: received NAK, trying next protocol", "desired", n.DesiredType)
 		pp.(*eap.Payload).Payload = nil
 		return next()
