@@ -33,6 +33,9 @@ func (p *Payload) Offerable() bool {
 }
 
 func (p *Payload) Decode(raw []byte) error {
+	if len(raw) < 4 {
+		return fmt.Errorf("EAP packet too short: %d bytes", len(raw))
+	}
 	p.Code = protocol.Code(raw[0])
 	p.ID = raw[1]
 	p.Length = binary.BigEndian.Uint16(raw[2:])
@@ -42,7 +45,11 @@ func (p *Payload) Decode(raw []byte) error {
 	if len(raw) > 4 && (p.Code == protocol.CodeRequest || p.Code == protocol.CodeResponse) {
 		p.MsgType = protocol.Type(raw[4])
 	}
-	p.RawPayload = raw[5:]
+	if len(raw) > 5 {
+		p.RawPayload = raw[5:]
+	} else {
+		p.RawPayload = []byte{}
+	}
 	if p.Payload == nil {
 		pp, _, err := EmptyPayload(p.Settings, p.MsgType)
 		if err != nil {
