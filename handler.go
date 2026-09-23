@@ -153,11 +153,24 @@ func (p *Packet) handleEAP(pp protocol.Payload, stm protocol.StateManager, paren
 		MsgType: t,
 	}
 	var payload any
-	if reflect.TypeOf(pp.(*eap.Payload).Payload) == reflect.TypeOf(np) {
-		err := np.Decode(pp.(*eap.Payload).RawPayload)
-		if err != nil {
-			ctx.log.Warn("failed to decode payload", "error", err)
-		}
+	incomingType := reflect.TypeOf(pp.(*eap.Payload).Payload)
+	expectedType := reflect.TypeOf(np)
+	// Reject type mismatch: incoming payload must match expected protocol type
+	if incomingType != expectedType {
+		ctx.log.Warn("protocol type mismatch", "expected", expectedType, "received", incomingType)
+		return &eap.Payload{
+			Code: protocol.CodeFailure,
+			ID:   p.eap.ID,
+		}, nil
+	}
+	// Decode the payload and reject on error
+	err = np.Decode(pp.(*eap.Payload).RawPayload)
+	if err != nil {
+		ctx.log.Warn("failed to decode payload", "error", err)
+		return &eap.Payload{
+			Code: protocol.CodeFailure,
+			ID:   p.eap.ID,
+		}, nil
 	}
 	payload = np.Handle(ctx)
 	if payload != nil {
