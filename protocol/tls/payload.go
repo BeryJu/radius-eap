@@ -190,9 +190,16 @@ func (p *Payload) tlsInit(ctx protocol.Context) {
 		cfg.KeyLogWriter = kl
 	}
 
+	// Preserve the original GetConfigForClient callback if present
+	originalGetConfigForClient := cfg.GetConfigForClient
+
 	cfg.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
 		ctx.Log().Debug("TLS: ClientHello", "ch", chi)
 		p.st.ClientHello = chi
+		// Invoke the original callback if it exists
+		if originalGetConfigForClient != nil {
+			return originalGetConfigForClient(chi)
+		}
 		return nil, nil
 	}
 	p.st.TLS = tls.Server(p.st.Conn, cfg)
