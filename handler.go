@@ -113,13 +113,23 @@ func (p *Packet) handleEAP(pp protocol.Payload, stm protocol.StateManager, paren
 		return p.handleEAP(pp, stm, nil)
 	}
 
-	if n, ok := pp.(*eap.Payload).Payload.(*legacy_nak.Payload); ok {
+	// Validate that the peer sent an EAP-Response before processing ANY peer input
+	// EAP-Request, EAP-Success, and EAP-Failure are server-to-peer codes
+	// and should not be accepted from a peer.
+	eapP := pp.(*eap.Payload)
+	if eapP.Code != protocol.CodeResponse {
+		l.Warn("Root-EAP: rejecting non-response EAP code from peer", "code", eapP.Code)
+		return &eap.Payload{Code: protocol.CodeFailure, ID: p.eap.ID},
+			fmt.Errorf("expected EAP Response, got code %d", eapP.Code)
+	}
+
+	if n, ok := eapP.Payload.(*legacy_nak.Payload); ok {
 		if st.ProtocolIndex == 0 {
 			l.Warn("Root-EAP: rejecting NAK at initial protocol")
 			return &eap.Payload{Code: protocol.CodeFailure, ID: p.eap.ID}, nil
 		}
 		l.Debug("Root-EAP: received NAK, trying next protocol", "desired", n.DesiredType)
-		pp.(*eap.Payload).Payload = nil
+		eapP.Payload = nil
 		return next()
 	}
 
