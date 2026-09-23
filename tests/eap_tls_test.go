@@ -106,3 +106,46 @@ func TestEAP_TLS_Reject(t *testing.T) {
 	assert.NotContains(t, strings.Join(tr, "\n"), "Attribute 65 (Tunnel-Medium-Type) length=6\n      Value: 01000006")
 	assert.NotContains(t, strings.Join(tr, "\n"), "Attribute 81 (Tunnel-Private-Group-Id) length=4\n      Value: 010d")
 }
+
+// TestEAP_TLS_FragmentedClientHello covers a ClientHello that does not fit into a single EAP
+// packet. Real-world trigger: supplicants offering a post-quantum hybrid key share (X25519MLKEM768),
+// whose ClientHello exceeds the default EAP fragment size. The test forces it deterministically
+// with a small client-side fragment_size.
+func TestEAP_TLS_FragmentedClientHello(t *testing.T) {
+	s := NewTestServer(t)
+	ident := ""
+	s.config = protocol.Settings{
+		Logger: eap.DefaultLogger(),
+		Protocols: []protocol.ProtocolConstructor{
+			identity.Protocol,
+			legacy_nak.Protocol,
+			tls.Protocol,
+		},
+		ProtocolPriority: []protocol.Type{identity.TypeIdentity, tls.TypeTLS},
+		ProtocolSettings: map[protocol.Type]interface{}{
+			tls.TypeTLS: tls.Settings{
+				Config: &ttls.Config{
+					Certificates: []ttls.Certificate{s.cert},
+					ClientAuth:   ttls.RequireAnyClientCert,
+				},
+				HandshakeSuccessful: func(ctx protocol.Context, certs []*x509.Certificate) protocol.Status {
+					identState, ok := ctx.GetProtocolState(identity.TypeIdentity).(*identity.State)
+					if !ok || identState == nil {
+						return protocol.StatusError
+					}
+					ident = identState.Identity
+					return protocol.StatusSuccess
+				},
+			},
+		},
+	}
+
+	ctx, canc := context.WithCancel(context.Background())
+	s.Run(ctx)
+	t.Cleanup(canc)
+
+	tr, st := EAPOLTest(t, "config/eap_tls_fragmented.conf")
+	assert.Equal(t, 0, st)
+	assert.Equal(t, "SUCCESS", tr[len(tr)-2])
+	assert.Equal(t, "foo", ident)
+}
