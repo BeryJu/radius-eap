@@ -83,12 +83,11 @@ func (conn *BuffConn) Read(p []byte) (int, error) {
 					conn.log.Debug("TLS(buffcon): Attempted read %d while waiting for bytes %d, stalling...", len(p), conn.expectedWriterByteCount-conn.reader.Len())
 					return 0, errStall
 				}
-				// If we have all the data, reset how much we're expecting to still get
-				if conn.writtenByteCount == int(conn.expectedWriterByteCount) {
-					conn.expectedWriterByteCount = 0
-				}
-			}
-			if conn.reader.Len() == 0 {
+				// All fragments of the current message have arrived; reset both counters so the
+				// next fragmented message starts from a clean slate. Previously only the expected
+				// count was reset, which left writtenByteCount inflated by earlier messages and
+				// let a later fragmented message be read before it was complete.
+				conn.expectedWriterByteCount = 0
 				conn.writtenByteCount = 0
 			}
 			n, err := conn.reader.Read(p)

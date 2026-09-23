@@ -102,6 +102,8 @@ func (p *Payload) Handle(ctx protocol.Context) protocol.Payload {
 		if p.Flags&FlagLengthIncluded != 0 && p.st.Conn.expectedWriterByteCount == 0 {
 			ctx.Log().Debug("TLS: Expecting total bytes, will buffer", "total", p.Length)
 			p.st.Conn.expectedWriterByteCount = int(p.Length)
+			// A new message starts here; the count must not carry over bytes of earlier messages
+			p.st.Conn.writtenByteCount = 0
 		} else if p.Flags&FlagLengthIncluded != 0 {
 			ctx.Log().Debug("TLS: No length included, not buffering")
 			p.st.Conn.expectedWriterByteCount = 0
@@ -179,7 +181,16 @@ func (p *Payload) ModifyRADIUSResponse(r *radius.Packet, q *radius.Packet) error
 func (p *Payload) tlsInit(ctx protocol.Context) {
 	ctx.Log().Debug("TLS: no TLS connection in state yet, starting connection")
 	p.st.Context, p.st.ContextCancel = context.WithTimeout(context.Background(), staleConnectionTimeout*time.Second)
-	p.st.Conn = NewBuffConn(p.Data, p.st.Context, ctx)
+	p.st.Conn = NewBuffConn([]byte{}, p.st.Context, ctx)
+	// The first TLS message (ClientHello) can itself be fragmented across multiple EAP packets,
+	// e.g. when the client offers a post-quantum hybrid key share (~1.2 KB on its own). Honor the
+	// length flag so the handshake waits for the full message instead of reading a truncated one,
+	// and so Handle() acknowledges the fragment instead of replying with an empty TLS record.
+	if p.Flags&FlagLengthIncluded != 0 && p.Flags&FlagMoreFragments != 0 {
+		ctx.Log().Debug("TLS: Initial message is fragmented, will buffer", "total", p.Length)
+		p.st.Conn.expectedWriterByteCount = int(p.Length)
+	}
+	p.st.Conn.UpdateData(p.Data)
 	cfg := ctx.ProtocolSettings().(TLSConfig).TLSConfig().Clone()
 
 	if klp, ok := os.LookupEnv("SSLKEYLOGFILE"); ok {
